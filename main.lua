@@ -105,15 +105,25 @@ write_to(proc.stdin, msg)
 
 local response = ""
 
+local visual_grids = {}
 local grids = {}
+local default_foreground
+local default_background
+local hl_defs = { [0] = {} }
 
 function resize_grid(index, width, height)
+    visual_grids[index] = {}
     grids[index] = {}
 
-    local line = ("X"):rep(width)
-
     for y = 1, height do
-        grids[index][y] = line
+        grids[index][y] = {}
+        visual_grids[index][y] = {}
+
+        for x = 1, width do
+            grids[index][y][x] = {
+                text = "X",
+            }
+        end
     end
 end
 
@@ -177,17 +187,73 @@ local redraw_event_handlers = {
         local x_start = data[3] + 1
         local cells = data[4]
 
+        if y <= #visual_grids[grid_index] then
+            visual_grids[grid_index][y].dirty = true
+        end
+
         local grid = grids[grid_index]
-        local cell_string = ""
+        -- local cell_string = ""
+
+        local x = x_start
+        local hl_id
 
         for _, cell in ipairs(cells) do
             local count = cell[3] or 1
-            cell_string = cell_string .. cell[1]:rep(count)
+            hl_id = cell[2] or hl_id
+            -- cell_string = cell_string .. cell[1]:rep(count)
+
+            for i = 1, count do
+                grid[y][x] = grid[y][x] or {}
+                grid[y][x].text = cell[1]
+                grid[y][x].hl_id = hl_id
+
+                x = x + 1
+            end
         end
 
-        local line = grid[y]:sub(1, x_start - 1) .. cell_string .. grid[y]:sub(x_start + #cell_string)
+        -- local line = grid[y]:sub(1, x_start - 1) .. cell_string .. grid[y]:sub(x_start + #cell_string)
 
-        grid[y] = line
+        -- grid[y] = line
+    end,
+    ["flush"] = function(data)
+        for grid_index, grid in ipairs(grids) do
+            local visual_grid = visual_grids[grid_index]
+
+            for y = 1, #grid do
+                if visual_grid[y].dirty then
+                    visual_grid[y].dirty = false
+                    visual_grid[y].chunks = {}
+
+                    local chunks = visual_grid[y].chunks
+                    local last_hl_id
+
+                    for x = 1, #grid[y] do
+                        if grid[y][x].hl_id ~= last_hl_id then
+                            table.insert(chunks, {
+                                text = grid[y][x].text,
+                                hl_id = grid[y][x].hl_id,
+                            })
+
+                            last_hl_id = grid[y][x].hl_id
+                        else
+                            local chunk = chunks[#chunks]
+                            chunk.text = chunk.text .. grid[y][x].text
+                        end
+                    end
+                end
+            end
+        end
+    end,
+    ["default_colors_set"] = function(data)
+        default_foreground = data[1]
+        default_background = data[2]
+    end,
+    ["hl_attr_define"] = function(data)
+        local id = data[1]
+        local rgb_attr = data[2]
+
+        print("def id: ", id)
+        hl_defs[id] = rgb_attr
     end,
 }
 
@@ -207,7 +273,43 @@ local notification_handlers = {
     end,
 }
 
+local font
+local line_height
+
 function love.load()
+    love.graphics.setNewFont("font.ttf", 16)
+
+    font = love.graphics.getFont()
+    line_height = font:getHeight()
+end
+
+function love.textinput(text)
+    local msg = msgpack.pack({ 2, "nvim_feedkeys", { text, "t", true } })
+
+    write_to(proc.stdin, msg)
+end
+
+local nvim_keycodes = {
+    ["escape"] = "<esc>",
+    ["return"] = "<return>",
+    ["up"] = "<up>",
+    ["down"] = "<down>",
+    ["left"] = "<left>",
+    ["right"] = "<right>",
+    ["backspace"] = "<bs>",
+}
+
+function love.keypressed(key)
+    local keycode = nvim_keycodes[key]
+
+    if not keycode then
+        print("Unhandled key:", key)
+        return
+    end
+
+    local msg = msgpack.pack({ 2, "nvim_input", { keycode } })
+
+    write_to(proc.stdin, msg)
 end
 
 function love.update(dt)
@@ -241,12 +343,41 @@ function love.update(dt)
     -- print(dt)
 end
 
+function set_color_rgb(rgb)
+    local r = bit.rshift(rgb, 16) / 0xff
+    local g = bit.band(bit.rshift(rgb, 8), 0xff) / 0xff
+    local b = bit.band(rgb, 0xff) / 0xff
+
+    love.graphics.setColor(r, g, b)
+end
+
 function love.draw()
     love.graphics.print("Hello World", 400, 300)
 
-    for _, grid in ipairs(grids) do
-        for y = 1, #grid do
-            love.graphics.print(grid[y], 0, (y - 1) * 12)
+    for _, visual_grid in ipairs(visual_grids) do
+        for i = 1, #visual_grid do
+            local y = (i - 1) * line_height
+            local x = 0
+
+            for _, chunk in ipairs(visual_grid[i].chunks) do
+                local hl_attr = hl_defs[chunk.hl_id]
+                local foreground = hl_attr.foreground or default_foreground
+                local background = hl_attr.background or default_background
+
+                if hl_attr.reverse then
+                    foreground, background = background, foreground
+                end
+
+                local width = font:getWidth(chunk.text)
+
+                set_color_rgb(background)
+                love.graphics.rectangle("fill", x, y, width, line_height)
+
+                set_color_rgb(foreground)
+                love.graphics.print(chunk.text, x, y)
+
+                x = x + width
+            end
         end
     end
 end
