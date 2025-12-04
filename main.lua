@@ -87,7 +87,7 @@ local function read_nonblocking(fd, maxlen)
     -- print("read start")
     local n = C.read(fd, buf, maxlen)
     -- print("read end")
-    if n <= 0 then
+    if n < 0 then
         return nil
     end
     return ffi.string(buf, n)
@@ -99,14 +99,11 @@ end
 
 local proc = spawn("nvim", { "--embed" })
 
-local msg = msgpack.pack({ 2, "nvim_ui_attach", { 80, 24, { ["ext_linegrid"] = true } } })
-
-write_to(proc.stdin, msg)
-
 local response = ""
 
 local visual_grids = {}
 local grids = {}
+local grid_cursors = {}
 local default_foreground
 local default_background
 local hl_defs = { [0] = {} }
@@ -117,11 +114,12 @@ function resize_grid(index, width, height)
 
     for y = 1, height do
         grids[index][y] = {}
-        visual_grids[index][y] = {}
+        visual_grids[index][y] = { chunks = {}, dirty = true }
 
         for x = 1, width do
             grids[index][y][x] = {
-                text = "X",
+                text = " ",
+                hl_id = 0,
             }
         end
     end
@@ -215,6 +213,9 @@ local redraw_event_handlers = {
 
         -- grid[y] = line
     end,
+    ["grid_cursor_goto"] = function(data)
+        grid_cursors[data[1]] = { y = data[2], x = data[3] }
+    end,
     ["flush"] = function(data)
         for grid_index, grid in ipairs(grids) do
             local visual_grid = visual_grids[grid_index]
@@ -275,12 +276,23 @@ local notification_handlers = {
 
 local font
 local line_height
+local em_width
 
 function love.load()
     love.graphics.setNewFont("font.ttf", 16)
 
     font = love.graphics.getFont()
     line_height = font:getHeight()
+    em_width = font:getWidth("M")
+
+    love.keyboard.setKeyRepeat(true)
+
+    local width = math.floor(love.graphics.getWidth() / em_width)
+    local height = math.floor(love.graphics.getHeight() / line_height)
+
+    local msg = msgpack.pack({ 2, "nvim_ui_attach", { width, height, { ["ext_linegrid"] = true } } })
+
+    write_to(proc.stdin, msg)
 end
 
 function love.textinput(text)
@@ -297,13 +309,14 @@ local nvim_keycodes = {
     ["left"] = "<left>",
     ["right"] = "<right>",
     ["backspace"] = "<bs>",
+    ["tab"] = "<tab>",
 }
 
 function love.keypressed(key)
     local keycode = nvim_keycodes[key]
 
     if not keycode then
-        print("Unhandled key:", key)
+        print("No keycode for key:", key)
         return
     end
 
@@ -312,10 +325,23 @@ function love.keypressed(key)
     write_to(proc.stdin, msg)
 end
 
+function love.resize(window_width, window_height)
+    local width = math.floor(window_width / em_width)
+    local height = math.floor(window_height / line_height)
+
+    local msg = msgpack.pack({ 2, "nvim_ui_try_resize", { width, height } })
+
+    write_to(proc.stdin, msg)
+end
+
 function love.update(dt)
     local out = read_nonblocking(proc.stdout)
 
     if out then
+        if #out == 0 then
+            love.event.quit()
+        end
+
         response = response .. out
 
         local offset
@@ -354,12 +380,12 @@ end
 function love.draw()
     love.graphics.print("Hello World", 400, 300)
 
-    for _, visual_grid in ipairs(visual_grids) do
+    for grid_index, visual_grid in ipairs(visual_grids) do
         for i = 1, #visual_grid do
             local y = (i - 1) * line_height
             local x = 0
 
-            for _, chunk in ipairs(visual_grid[i].chunks) do
+            for chunk_index, chunk in ipairs(visual_grid[i].chunks) do
                 local hl_attr = hl_defs[chunk.hl_id]
                 local foreground = hl_attr.foreground or default_foreground
                 local background = hl_attr.background or default_background
@@ -369,9 +395,18 @@ function love.draw()
                 end
 
                 local width = font:getWidth(chunk.text)
+                local height = line_height
+
+                if i == #visual_grid then
+                    height = height + line_height
+                end
+
+                if chunk_index == #visual_grid[i].chunks then
+                    width = width + em_width
+                end
 
                 set_color_rgb(background)
-                love.graphics.rectangle("fill", x, y, width, line_height)
+                love.graphics.rectangle("fill", x, y, width, height)
 
                 set_color_rgb(foreground)
                 love.graphics.print(chunk.text, x, y)
@@ -379,5 +414,17 @@ function love.draw()
                 x = x + width
             end
         end
+
+        local grid = grids[grid_index]
+        local grid_cursor = grid_cursors[grid_index]
+
+        local x = grid_cursor.x * em_width
+        local y = grid_cursor.y * line_height
+
+        set_color_rgb(default_foreground)
+        love.graphics.rectangle("fill", x, y, em_width, line_height)
+
+        set_color_rgb(default_background)
+        love.graphics.print(grid[grid_cursor.y + 1][grid_cursor.x + 1].text, x, y)
     end
 end
