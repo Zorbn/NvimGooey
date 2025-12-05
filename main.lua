@@ -224,7 +224,7 @@ local redraw_event_handlers = {
         local grid = grids[grid_index]
         local visual_grid = visual_grids[grid_index]
 
-        local start = rows < 0 and bottom - rows or top + rows
+        local start = (rows < 0 and bottom or top) + rows
         local finish = rows < 0 and top or bottom
         local step = rows < 0 and -1 or 1
 
