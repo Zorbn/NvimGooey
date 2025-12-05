@@ -213,6 +213,35 @@ local redraw_event_handlers = {
 
         -- grid[y] = line
     end,
+    ["grid_scroll"] = function(data)
+        local grid_index = data[1]
+        local top = data[2] + 1
+        local bottom = data[3]
+        local left = data[4] + 1
+        local right = data[5]
+        local rows = data[6]
+
+        local grid = grids[grid_index]
+        local visual_grid = visual_grids[grid_index]
+
+        local start = rows < 0 and bottom - rows or top + rows
+        local finish = rows < 0 and top or bottom
+        local step = rows < 0 and -1 or 1
+
+        print(start, finish, step, left, right, rows)
+
+        for y = start, finish, step do
+            visual_grid[y - rows].dirty = true
+
+            for x = left, right do
+                local dst_cell = grid[y - rows][x]
+                local src_cell = grid[y][x]
+
+                dst_cell.text = src_cell.text
+                dst_cell.hl_id = src_cell.hl_id
+            end
+        end
+    end,
     ["grid_cursor_goto"] = function(data)
         grid_cursors[data[1]] = { y = data[2], x = data[3] }
     end,
@@ -274,21 +303,26 @@ local notification_handlers = {
     end,
 }
 
+local dpi_scale
 local font
 local line_height
 local em_width
 
 function love.load()
-    love.graphics.setNewFont("font.ttf", 16)
+    dpi_scale = 1 -- love.window.getDPIScale()
+
+    local rasterizer = love.font.newRasterizer("font.ttf", 16, "normal", 2.0)
+    love.graphics.setNewFont(rasterizer)
 
     font = love.graphics.getFont()
     line_height = font:getHeight()
+    print(line_height)
     em_width = font:getWidth("M")
 
     love.keyboard.setKeyRepeat(true)
 
-    local width = math.floor(love.graphics.getWidth() / em_width)
-    local height = math.floor(love.graphics.getHeight() / line_height)
+    local width = math.floor(love.graphics.getWidth() * dpi_scale / em_width)
+    local height = math.floor(love.graphics.getHeight() * dpi_scale / line_height)
 
     local msg = msgpack.pack({ 2, "nvim_ui_attach", { width, height, { ["ext_linegrid"] = true } } })
 
@@ -326,8 +360,8 @@ function love.keypressed(key)
 end
 
 function love.resize(window_width, window_height)
-    local width = math.floor(window_width / em_width)
-    local height = math.floor(window_height / line_height)
+    local width = math.floor(window_width * dpi_scale / em_width)
+    local height = math.floor(window_height * dpi_scale / line_height)
 
     local msg = msgpack.pack({ 2, "nvim_ui_try_resize", { width, height } })
 
@@ -378,7 +412,7 @@ function set_color_rgb(rgb)
 end
 
 function love.draw()
-    love.graphics.print("Hello World", 400, 300)
+    -- love.graphics.scale(0.5, 0.5)
 
     for grid_index, visual_grid in ipairs(visual_grids) do
         for i = 1, #visual_grid do
