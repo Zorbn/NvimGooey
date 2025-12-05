@@ -307,6 +307,8 @@ local dpi_scale
 local font
 local line_height
 local em_width
+local window_width
+local window_height
 
 function love.load()
     dpi_scale = 1 -- love.window.getDPIScale()
@@ -321,8 +323,11 @@ function love.load()
 
     love.keyboard.setKeyRepeat(true)
 
-    local width = math.floor(love.graphics.getWidth() * dpi_scale / em_width)
-    local height = math.floor(love.graphics.getHeight() * dpi_scale / line_height)
+    window_width = love.graphics.getWidth()
+    window_height = love.graphics.getHeight()
+
+    local width = math.floor(window_width * dpi_scale / em_width)
+    local height = math.floor(window_height * dpi_scale / line_height)
 
     local msg = msgpack.pack({ 2, "nvim_ui_attach", { width, height, { ["ext_linegrid"] = true } } })
 
@@ -359,7 +364,10 @@ function love.keypressed(key)
     write_to(proc.stdin, msg)
 end
 
-function love.resize(window_width, window_height)
+function love.resize(new_window_width, new_window_height)
+    window_width = new_window_width
+    window_height = new_window_height
+
     local width = math.floor(window_width * dpi_scale / em_width)
     local height = math.floor(window_height * dpi_scale / line_height)
 
@@ -432,11 +440,11 @@ function love.draw()
                 local height = line_height
 
                 if i == #visual_grid then
-                    height = height + line_height
+                    height = window_height - y
                 end
 
                 if chunk_index == #visual_grid[i].chunks then
-                    width = width + em_width
+                    width = window_width - x
                 end
 
                 set_color_rgb(background)
