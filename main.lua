@@ -26,7 +26,6 @@ void _exit(int status);
 local function spawn(cmd, args)
     args = args or {}
 
-    -- Build argv array for execvp
     local argv = ffi.new("char*[?]", #args + 2)
     argv[0] = ffi.new("char[?]", #cmd+1, cmd)
     for i=1,#args do
@@ -34,7 +33,6 @@ local function spawn(cmd, args)
     end
     argv[#args+1] = nil
 
-    -- pipes: parent writes to child_stdin[1], reads from child_stdout[0]
     local child_stdin  = ffi.new("int[2]")
     local child_stdout = ffi.new("int[2]")
 
@@ -45,7 +43,6 @@ local function spawn(cmd, args)
     assert(pid >= 0)
 
     if pid == 0 then
-        -- Child process
         C.close(child_stdin[1])
         C.close(child_stdout[0])
 
@@ -56,23 +53,13 @@ local function spawn(cmd, args)
         C.close(child_stdout[1])
 
         C.execvp(cmd, argv)
-        C._exit(1)  -- exec failed
+        C._exit(1)
     end
 
-    -- Parent
     C.close(child_stdin[0])
     C.close(child_stdout[1])
 
-    -- Nonblocking read end
-    -- C.fcntl(child_stdout[0], C.F_SETFL, C.O_NONBLOCK)
-
-    local function set_nonblocking(fd)
-        local err = C.fcntl(fd, C.F_SETFL, ffi.new("int", C.O_NONBLOCK))
-
-        assert(err == 0)
-    end
-
-    set_nonblocking(child_stdout[0])
+    C.fcntl(child_stdout[0], C.F_SETFL, ffi.new("int", C.O_NONBLOCK))
 
     return {
         pid = pid,
@@ -81,15 +68,14 @@ local function spawn(cmd, args)
     }
 end
 
-local function read_nonblocking(fd, maxlen)
-    maxlen = maxlen or 40960
-    local buf = ffi.new("char[?]", maxlen)
-    -- print("read start")
-    local n = C.read(fd, buf, maxlen)
-    -- print("read end")
-    if n < 0 then
-        return nil
-    end
+local buf_len = 4096
+local buf = ffi.new("char[?]", buf_len)
+
+local function read_nonblocking(fd)
+    local n = C.read(fd, buf, buf_len)
+
+    if n < 0 then return nil end
+
     return ffi.string(buf, n)
 end
 
@@ -190,7 +176,6 @@ local redraw_event_handlers = {
         end
 
         local grid = grids[grid_index]
-        -- local cell_string = ""
 
         local x = x_start
         local hl_id
@@ -198,7 +183,6 @@ local redraw_event_handlers = {
         for _, cell in ipairs(cells) do
             local count = cell[3] or 1
             hl_id = cell[2] or hl_id
-            -- cell_string = cell_string .. cell[1]:rep(count)
 
             for i = 1, count do
                 grid[y][x] = grid[y][x] or {}
@@ -208,10 +192,6 @@ local redraw_event_handlers = {
                 x = x + 1
             end
         end
-
-        -- local line = grid[y]:sub(1, x_start - 1) .. cell_string .. grid[y]:sub(x_start + #cell_string)
-
-        -- grid[y] = line
     end,
     ["grid_scroll"] = function(data)
         local grid_index = data[1]
@@ -227,8 +207,6 @@ local redraw_event_handlers = {
         local start = (rows < 0 and bottom or top) + rows
         local finish = rows < 0 and top or bottom
         local step = rows < 0 and -1 or 1
-
-        print(start, finish, step, left, right, rows)
 
         for y = start, finish, step do
             visual_grid[y - rows].dirty = true
@@ -472,13 +450,15 @@ function love.draw()
         local grid = grids[grid_index]
         local grid_cursor = grid_cursors[grid_index]
 
-        local x = grid_cursor.x * em_width
-        local y = grid_cursor.y * line_height
+        if grid_cursor then
+            local x = grid_cursor.x * em_width
+            local y = grid_cursor.y * line_height
 
-        set_color_rgb(default_foreground)
-        love.graphics.rectangle("fill", x, y, em_width, line_height)
+            set_color_rgb(default_foreground)
+            love.graphics.rectangle("fill", x, y, em_width, line_height)
 
-        set_color_rgb(default_background)
-        love.graphics.print(grid[grid_cursor.y + 1][grid_cursor.x + 1].text, x, y)
+            set_color_rgb(default_background)
+            love.graphics.print(grid[grid_cursor.y + 1][grid_cursor.x + 1].text, x, y)
+        end
     end
 end
