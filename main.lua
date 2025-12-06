@@ -311,9 +311,9 @@ local window_width
 local window_height
 
 function love.load()
-    dpi_scale = 1 -- love.window.getDPIScale()
+    dpi_scale = love.window.getDPIScale()
 
-    local rasterizer = love.font.newRasterizer("font.ttf", 16, "normal", 2.0)
+    local rasterizer = love.font.newRasterizer("font.ttf", 16 * love.window.getDPIScale(), "normal", 1)
     love.graphics.setNewFont(rasterizer)
 
     font = love.graphics.getFont()
@@ -323,11 +323,11 @@ function love.load()
 
     love.keyboard.setKeyRepeat(true)
 
-    window_width = love.graphics.getWidth()
-    window_height = love.graphics.getHeight()
+    window_width = love.graphics.getWidth() * dpi_scale
+    window_height = love.graphics.getHeight() * dpi_scale
 
-    local width = math.floor(window_width * dpi_scale / em_width)
-    local height = math.floor(window_height * dpi_scale / line_height)
+    local width = math.floor(window_width / em_width)
+    local height = math.floor(window_height / line_height)
 
     local msg = msgpack.pack({ 2, "nvim_ui_attach", { width, height, { ["ext_linegrid"] = true } } })
 
@@ -365,11 +365,11 @@ function love.keypressed(key)
 end
 
 function love.resize(new_window_width, new_window_height)
-    window_width = new_window_width
-    window_height = new_window_height
+    window_width = new_window_width * dpi_scale
+    window_height = new_window_height * dpi_scale
 
-    local width = math.floor(window_width * dpi_scale / em_width)
-    local height = math.floor(window_height * dpi_scale / line_height)
+    local width = math.floor(window_width / em_width)
+    local height = math.floor(window_height / line_height)
 
     local msg = msgpack.pack({ 2, "nvim_ui_try_resize", { width, height } })
 
@@ -420,7 +420,7 @@ function set_color_rgb(rgb)
 end
 
 function love.draw()
-    -- love.graphics.scale(0.5, 0.5)
+    love.graphics.scale(1 / dpi_scale, 1 / dpi_scale)
 
     for grid_index, visual_grid in ipairs(visual_grids) do
         for i = 1, #visual_grid do
