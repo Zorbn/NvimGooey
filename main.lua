@@ -285,7 +285,7 @@ local window_width, window_height
 function love.load()
     dpi_scale = love.window.getDPIScale()
 
-    local font_size = 16 * love.window.getDPIScale()
+    local font_size = 14 * love.window.getDPIScale()
 
     font = love.graphics.newFont("font.ttf", font_size, "normal", 1)
     font_bold = love.graphics.newFont("font-bold.ttf", font_size, "normal", 1)
@@ -396,7 +396,7 @@ function love.draw()
     love.graphics.scale(1 / dpi_scale, 1 / dpi_scale)
 
     for grid_index, visual_grid in ipairs(visual_grids) do
-        for i = 1, #visual_grid do
+        for i = #visual_grid, 1, -1 do
             local y = (i - 1) * line_height
             local x = 0
 
