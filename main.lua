@@ -335,20 +335,21 @@ function love.load()
 end
 
 function love.textinput(text)
-    local msg = msgpack.pack({ 2, "nvim_feedkeys", { text, "t", true } })
+    -- local msg = msgpack.pack({ 2, "nvim_feedkeys", { text, "t", true } })
+    local msg = msgpack.pack({ 2, "nvim_input", { text } })
 
     write_to(proc.stdin, msg)
 end
 
 local nvim_keycodes = {
-    ["escape"] = "<esc>",
-    ["return"] = "<return>",
-    ["up"] = "<up>",
-    ["down"] = "<down>",
-    ["left"] = "<left>",
-    ["right"] = "<right>",
-    ["backspace"] = "<bs>",
-    ["tab"] = "<tab>",
+    ["escape"] = "esc",
+    ["return"] = "return",
+    ["up"] = "up",
+    ["down"] = "down",
+    ["left"] = "left",
+    ["right"] = "right",
+    ["backspace"] = "bs",
+    ["tab"] = "tab",
 }
 
 function love.keypressed(key)
@@ -356,10 +357,21 @@ function love.keypressed(key)
 
     if not keycode then
         print("No keycode for key:", key)
-        return
     end
 
-    local msg = msgpack.pack({ 2, "nvim_input", { keycode } })
+    local has_ctrl = love.keyboard.isDown("lctrl", "rctrl")
+
+    if not keycode and not has_ctrl then return end
+
+    local input = keycode or key
+
+    if has_ctrl then
+        input = "C-" .. input
+
+        print(input)
+    end
+
+    local msg = msgpack.pack({ 2, "nvim_input", { "<" .. input .. ">" } })
 
     write_to(proc.stdin, msg)
 end
