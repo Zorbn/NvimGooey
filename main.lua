@@ -164,8 +164,6 @@ local redraw_event_handlers = {
         clear_grid(data[1])
     end,
     ["grid_line"] = function(data)
-        -- pprint(data)
-
         local grid_index = data[1]
         local y = data[2] + 1
         local x_start = data[3] + 1
@@ -260,7 +258,6 @@ local redraw_event_handlers = {
         local id = data[1]
         local rgb_attr = data[2]
 
-        print("def id: ", id)
         hl_defs[id] = rgb_attr
     end,
 }
@@ -268,8 +265,6 @@ local redraw_event_handlers = {
 local notification_handlers = {
     ["redraw"] = function(data)
         for _, event in pairs(data) do
-            -- pprint("Redraw event: ", event[1], ": ", event[2])
-
             local handler = redraw_event_handlers[event[1]]
 
             if handler then
@@ -282,21 +277,22 @@ local notification_handlers = {
 }
 
 local dpi_scale
-local font
+local font, font_bold
 local line_height
 local em_width
-local window_width
-local window_height
+local window_width, window_height
 
 function love.load()
     dpi_scale = love.window.getDPIScale()
 
-    local rasterizer = love.font.newRasterizer("font.ttf", 16 * love.window.getDPIScale(), "normal", 1)
-    love.graphics.setNewFont(rasterizer)
+    local font_size = 16 * love.window.getDPIScale()
 
-    font = love.graphics.getFont()
+    font = love.graphics.newFont("font.ttf", font_size, "normal", 1)
+    font_bold = love.graphics.newFont("font-bold.ttf", font_size, "normal", 1)
+
+    love.graphics.setFont(font)
+
     line_height = font:getHeight()
-    print(line_height)
     em_width = font:getWidth("M")
 
     love.keyboard.setKeyRepeat(true)
@@ -313,7 +309,6 @@ function love.load()
 end
 
 function love.textinput(text)
-    -- local msg = msgpack.pack({ 2, "nvim_feedkeys", { text, "t", true } })
     local msg = msgpack.pack({ 2, "nvim_input", { text } })
 
     write_to(proc.stdin, msg)
@@ -332,11 +327,6 @@ local nvim_keycodes = {
 
 function love.keypressed(key)
     local keycode = nvim_keycodes[key]
-
-    if not keycode then
-        print("No keycode for key:", key)
-    end
-
     local has_ctrl = love.keyboard.isDown("lctrl", "rctrl")
 
     if not keycode and not has_ctrl then return end
@@ -345,8 +335,6 @@ function love.keypressed(key)
 
     if has_ctrl then
         input = "C-" .. input
-
-        print(input)
     end
 
     local msg = msgpack.pack({ 2, "nvim_input", { "<" .. input .. ">" } })
@@ -383,11 +371,8 @@ function love.update(dt)
 
             if offset then
                 response = response:sub(offset + 1)
-                print("Child replied:", msg[1], msg[2], msg[3] and #msg[3])
 
                 if msg[1] == 2 then
-                    -- pprint(msg[2], ": ", msg[3])
-
                     local handler = notification_handlers[msg[2]]
 
                     if handler then
@@ -397,8 +382,6 @@ function love.update(dt)
             end
         until not offset
     end
-
-    -- print(dt)
 end
 
 function set_color_rgb(rgb)
@@ -424,6 +407,12 @@ function love.draw()
 
                 if hl_attr.reverse then
                     foreground, background = background, foreground
+                end
+
+                if hl_attr.bold then
+                    love.graphics.setFont(font_bold)
+                else
+                    love.graphics.setFont(font)
                 end
 
                 local width = font:getWidth(chunk.text)

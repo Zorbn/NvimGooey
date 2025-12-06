@@ -473,7 +473,6 @@ unpackers.str8 = function(buf,offset)
   if offset + 1 >= buf.size then return nil,nil end
   local n = unpack_number(buf,offset,"uint8_t *",1)
   if offset + 1 + n >= buf.size then return nil,nil end
-  print(n, ffi.string(buf.data+offset+1,n+1))
   return offset+2+n,ffi.string(buf.data+offset+1,n+1)
 end
 
