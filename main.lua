@@ -2,9 +2,9 @@ local ffi = require("ffi")
 local C = ffi.C
 local msgpack = require("luajit-msgpack-pure")
 
-ffi.cdef[[
-typedef unsigned int   uint32_t;
-typedef int            pid_t;
+ffi.cdef([[
+typedef unsigned int uint32_t;
+typedef int pid_t;
 typedef long ssize_t;
 
 int pipe(int pipefd[2]);
@@ -16,12 +16,12 @@ ssize_t read(int fd, void *buf, size_t count);
 ssize_t write(int fd, const void *buf, size_t count);
 int fcntl(int fd, int cmd, ...);
 
-static const int O_NONBLOCK = 0x0004; // Different on Linux, this is for Mac
-static const int F_SETFL   = 4;
-static const int F_GETFL   = 3;
+static const int O_NONBLOCK = 4; // Different on Linux, this is for Mac
+static const int F_SETFL = 4;
+static const int F_GETFL = 3;
 
 void _exit(int status);
-]]
+]])
 
 local function spawn(cmd, args)
     args = args or {}
@@ -33,7 +33,7 @@ local function spawn(cmd, args)
     end
     argv[#args+1] = nil
 
-    local child_stdin  = ffi.new("int[2]")
+    local child_stdin = ffi.new("int[2]")
     local child_stdout = ffi.new("int[2]")
 
     assert(C.pipe(child_stdin) == 0)
@@ -63,7 +63,7 @@ local function spawn(cmd, args)
 
     return {
         pid = pid,
-        stdin  = child_stdin[1],
+        stdin = child_stdin[1],
         stdout = child_stdout[0]
     }
 end
@@ -306,6 +306,14 @@ function love.load()
     local msg = msgpack.pack({ 2, "nvim_ui_attach", { width, height, { ["ext_linegrid"] = true } } })
 
     write_to(proc.stdin, msg)
+end
+
+function love.quit()
+    local msg = msgpack.pack({ 2, "nvim_command", { "confirm quitall" } })
+
+    write_to(proc.stdin, msg)
+
+    return true
 end
 
 function love.textinput(text)
