@@ -93,6 +93,8 @@ local grid_cursors = {}
 local default_foreground
 local default_background
 local hl_defs = { [0] = {} }
+local mode_info
+local mode_index
 
 function resize_grid(index, width, height)
     visual_grids[index] = {}
@@ -260,6 +262,12 @@ local redraw_event_handlers = {
 
         hl_defs[id] = rgb_attr
     end,
+    ["mode_info_set"] = function(data)
+        mode_info = data[2]
+    end,
+    ["mode_change"] = function(data)
+        mode_index = data[2] + 1
+    end,
 }
 
 local notification_handlers = {
@@ -280,6 +288,7 @@ local dpi_scale
 local font, font_bold
 local line_height
 local em_width
+local cursor_width
 local window_width, window_height
 
 function love.load()
@@ -294,6 +303,7 @@ function love.load()
 
     line_height = font:getHeight()
     em_width = font:getWidth("M")
+    cursor_width = dpi_scale * 2
 
     love.keyboard.setKeyRepeat(true)
 
@@ -447,15 +457,25 @@ function love.draw()
         local grid = grids[grid_index]
         local grid_cursor = grid_cursors[grid_index]
 
-        if grid_cursor then
+        if grid_cursor and mode_info and mode_index then
             local x = grid_cursor.x * em_width
             local y = grid_cursor.y * line_height
 
-            set_color_rgb(default_foreground)
-            love.graphics.rectangle("fill", x, y, em_width, line_height)
+            local mode = mode_info[mode_index]
 
-            set_color_rgb(default_background)
-            love.graphics.print(grid[grid_cursor.y + 1][grid_cursor.x + 1].text, x, y)
+            set_color_rgb(default_foreground)
+
+            if mode.cursor_shape == "block" then
+                love.graphics.rectangle("fill", x, y, em_width, line_height)
+
+                set_color_rgb(default_background)
+                love.graphics.print(grid[grid_cursor.y + 1][grid_cursor.x + 1].text, x, y)
+            elseif mode.cursor_shape == "horizontal" then
+                love.graphics.rectangle("fill", x, y + line_height - cursor_width,
+                    em_width, cursor_width)
+            elseif mode.cursor_shape == "vertical" then
+                love.graphics.rectangle("fill", x, y, cursor_width, line_height)
+            end
         end
     end
 end
